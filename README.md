@@ -1,107 +1,126 @@
-# Information Retrieval Systems — Part B 
+# Information Retrieval Pipeline
 
-This repository is a clean starter for Part B of the IR assignment. It includes module stubs and entry points that match the required interfaces. Many functions are intentionally left unimplemented so students can complete Tasks 1–4.
+A modular Python information retrieval system with:
+- unified indexing (token, wildcard, and positional indexes),
+- query processing (boolean, wildcard, proximity, natural-language routing),
+- multiple rankers (BM25/TF-IDF/semantic/hybrid),
+- batch run generation and MAP evaluation.
 
-## Setup
+## Project Structure
 
-- Python 3.8+
-- Optional: virtual environment
+```
+data/dev/                  # development dataset (documents, queries, relevance judgments)
+index/                     # unified index build/load/access
+query_processing/          # query type detection + query executors
+ranking/                   # ranking algorithms and dev ranking benchmark script
+system/search_system.py    # end-to-end batch retrieval CLI
+metrics/eval_map.py        # MAP evaluator for run files
+runs/                      # output run files (*.json)
+cache/                     # generated compressed index package
+test_sanity/               # smoke tests for Tasks 1-4 interfaces
+```
+
+## Requirements
+
+- Python 3.9+
+- Dependencies in `requirements.txt`:
+  - `numpy`
+  - `nltk`
+  - `beautifulsoup4`
+
+Install:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-# Download minimal NLTK data used by utils/text_preprocessing.py
-python - <<'PY'
-import nltk
-for pkg in ["punkt", "stopwords", "wordnet", "omw-1.4"]:
-    nltk.download(pkg)
 ```
 
-## Repository layout
+Note: NLTK resources (`punkt`, `punkt_tab`, `wordnet`, `stopwords`) are downloaded automatically by runnable scripts.
 
-```
-index/
-  __init__.py
-  access.py          # Task 1 access (O(1) in-memory lookups after load)
-  builders.py        # Task 1 single builder: create_all_indexes(...)
-  io.py              # gzip+pickle I/O helpers
-metrics/
-  eval_map.py        # Task 4: compute MAP over ./runs/ vs data/dev/relevance_judge.json
-query_processing/
-  boolean.py         # Task 2: process_boolean_query(...)
-  detection.py       # Task 2: detect_query_type(...)
-  proximity.py       # Task 2: process_proximity_query(...)
-  query_process.py   # Task 2: convert_natural_language(...), process_query(...)
-  wildcard.py        # Task 2: process_wildcard_query(...)
-ranking/
-  rankers.py         # Task 3: rank_documents(...); main prints Pearson table on dev set
-system/
-  search_system.py   # Task 4: batch CLI
-utils/
-  embeddings.py      # Part A: semantic_vector(...)
-  ngram.py           # Part A: make_ngrams_tokens(...), make_ngrams_chars(...)
-  positions.py       # Part A: make_positions(...)
-  text_preprocessing.py  # Part A: preprocess(...)
-  tfidf.py           # Part A: tfidf_variants(...)
-data/
-  dev/
-    documents.jsonl
-    queries.json
-    relevance_judge.json
-runs/                # Your output runs (*.json)
-cache/               # Transient index package file written by the CLI
-```
+## Quick Start
 
-## What is provided vs to-do
+Run the full retrieval pipeline on the dev set:
 
-- Provided: function signatures, I/O scaffolding, CLI shells, and data files under `data/dev/`.
-- To implement (placeholders present):
-  - Task 1: `index/builders.py:create_all_indexes`; `index/access.py` accessors.
-  - Task 2: query detection, boolean/wildcard/proximity processors, OR-converter.
-  - Task 3: `ranking/rankers.py:rank_documents` and a small main that prints Pearson correlation for your methods on the dev set.
-  - Task 4: complete the pipeline inside `system/search_system.py` and `metrics/eval_map.py`.
-
-No completed solutions are included; all core algorithmic functions are left as TODOs.
-
-## TASK 4
-
-Two non-ranking optimizations were implemented in search_system.py as Boolean flags (USE_QUERY_EXPANSION, USE_CANDIDATE_PRUNING) to enable experimentation without changing the CLI. enable/disable these flags if required.
-
- method = "default"  # or "bm25", "semantic", "default", "hybrid" (#line 159)
- 
- Change method in search_system.py file if required.
-
-## Required CLIs (after you implement TODOs)
-
-- Batch search run (Task 4):
 ```bash
 python system/search_system.py data/dev/queries.json data/dev/documents.jsonl runs/run_default.json
 ```
 
-- MAP evaluation over all files in `./runs/` (Task 4):
+Evaluate MAP across all run files in `runs/`:
+
 ```bash
 python metrics/eval_map.py
 ```
 
-- Ranking development evaluation (Task 3):
+Evaluate ranking methods on the dev set (Pearson correlation against relevance scores):
+
 ```bash
 python ranking/rankers.py
 ```
 
-## Query types (detection is case-sensitive)
+Run smoke tests:
 
-- Boolean: `AND` / `OR` / `NOT`, parentheses, and quoted phrases.
-- Wildcard: patterns with `*`, expanded using char n‑grams with `$` boundaries.
-- Proximity: `NEAR/k` between terms or quoted phrases (edge-to-edge distance).
-- Natural language: whitespace tokens converted to `a OR b OR c`.
+```bash
+python test_sanity/check_submission.py
+```
 
-## Notes and constraints
+## Pipeline Overview
 
-- Single unified index package file; load once and cache for O(1) dictionary lookups in memory (disk load excluded from complexity).
-- Deterministic outputs and tie-breaking (e.g., by ascending `doc_id`).
-- Enforce the 20-document semantic budget per query inside ranking if you use semantic vectors.
-- Do not check in persistent caches; the CLI writes to `cache/` per run and may overwrite.
+1. Load documents and queries.
+2. Preprocess document text (`utils/text_preprocessing.py`).
+3. Build a single compressed index package (`index/builders.py`) containing:
+   - `unified` postings,
+   - `wildcard` character n-gram index,
+   - `proximity` positional index,
+   - metadata (`N`, `doc_lengths`, `avgdl`).
+4. Route each query via `query_processing/query_process.py`:
+   - boolean (`AND`, `OR`, `NOT`, parentheses, quoted phrases),
+   - wildcard (`*` pattern),
+   - proximity (`NEAR/k`),
+   - natural-language (converted to OR expression).
+5. Optional candidate pruning and query expansion (in `system/search_system.py`).
+6. Rank candidates with `ranking/rankers.py`.
+7. Write run file JSON (`qid`, `doc_ids`, `scores`).
 
-## Academic integrity
+## Ranking Methods
 
-Do not use Generative AI to produce code or algorithms. You may use it to edit your one-page write‑up (include the required declaration).
+`ranking.rankers.rank_documents(..., method=...)` supports:
+- `bm25`
+- `tfidf`
+- `semantic`
+- `hybrid`
+- `default` (mapped internally to `hybrid`)
+
+In `system/search_system.py`, ranking mode is currently set by the `method` variable inside the query loop.
+
+## Query Syntax
+
+Query detection is case-sensitive for operators:
+- Boolean: `AND`, `OR`, `NOT`, `(`, `)`, quoted phrase (up to 3 tokens)
+- Wildcard: single pattern string containing `*` (no boolean/proximity operators)
+- Proximity: `<term_or_phrase> NEAR/k <term_or_phrase>`
+- Natural-language: plain text (converted to `token1 OR token2 OR ...`)
+
+Malformed query structures raise `ValueError` during validation in `query_processing/detection.py`.
+
+## Run Output Format
+
+`system/search_system.py` writes:
+
+```json
+[
+  {
+    "qid": "q1",
+    "doc_ids": [12, 9, 31],
+    "scores": [1.234, 0.992, 0.774]
+  }
+]
+```
+
+`metrics/eval_map.py` also supports a backward-compatible format containing `results: [{doc_id: ...}]`.
+
+## Notes
+
+- Indexes are stored as gzip+pickle packages via `index/io.py`.
+- Index access uses in-process caching in `index/access.py`.
+- Default top-k output in the batch system is top 10 documents per query.
